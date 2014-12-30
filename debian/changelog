@@ -1,3 +1,9 @@
+libtorrent (0.13.4-1+pepe) unstable; urgency=medium
+
+  * new upstream release
+
+ -- Piotr Kaczuba <p.kaczuba@trosti.pl>  Sun, 28 Dec 2014 22:05:31 +0100
+
 libtorrent (0.13.3-2+pepe) unstable; urgency=low
 
   * pull from upstream

@@ -11,7 +11,6 @@ Build-Depends:
  debhelper (>= 7.0.50~),
  libcppunit-dev,
  libcurl4-openssl-dev,
- libsigc++-2.0-dev,
  libssl-dev
 Standards-Version: 3.9.2
 Vcs-git: git://git.debian.org/git/collab-maint/libtorrent.git
@@ -22,7 +21,6 @@ Package: libtorrent-dev
 Section: libdevel
 Architecture: any
 Depends:
- libsigc++-2.0-dev,
  libtorrent14 (= ${binary:Version}),
  ${misc:Depends}
 Description: C++ BitTorrent library by Rakshasa (development files)
