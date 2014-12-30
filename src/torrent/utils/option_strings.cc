@@ -72,22 +72,22 @@ option_pair option_list_connection[] = {
 
 option_pair option_list_heuristics[] = {
   { "upload_leech",              choke_queue::HEURISTICS_UPLOAD_LEECH },
-  { "upload_leech_dummy",        choke_queue::HEURISTICS_UPLOAD_LEECH_DUMMY },
+  { "upload_leech_experimental", choke_queue::HEURISTICS_UPLOAD_LEECH_EXPERIMENTAL },
+  { "upload_seed",               choke_queue::HEURISTICS_UPLOAD_SEED },
   { "download_leech",            choke_queue::HEURISTICS_DOWNLOAD_LEECH },
-  { "download_leech_dummy",      choke_queue::HEURISTICS_DOWNLOAD_LEECH_DUMMY },
   { "invalid",                   choke_queue::HEURISTICS_MAX_SIZE },
   { NULL, 0 }
 };
 
 option_pair option_list_heuristics_download[] = {
   { "download_leech",            choke_queue::HEURISTICS_DOWNLOAD_LEECH },
-  { "download_leech_dummy",      choke_queue::HEURISTICS_DOWNLOAD_LEECH_DUMMY },
   { NULL, 0 }
 };
 
 option_pair option_list_heuristics_upload[] = {
   { "upload_leech",              choke_queue::HEURISTICS_UPLOAD_LEECH },
-  { "upload_leech_dummy",        choke_queue::HEURISTICS_UPLOAD_LEECH_DUMMY },
+  { "upload_leech_experimental", choke_queue::HEURISTICS_UPLOAD_LEECH_EXPERIMENTAL },
+  { "upload_seed",               choke_queue::HEURISTICS_UPLOAD_SEED },
   { NULL, 0 }
 };
 
@@ -153,13 +153,6 @@ const char* option_list_log_group[] = {
   "peer_info",
   "peer_debug",
   
-  "rpc_critical",
-  "rpc_error",
-  "rpc_warn",
-  "rpc_notice",
-  "rpc_info",
-  "rpc_debug",
-  
   "socket_critical",
   "socket_error",
   "socket_warn",
@@ -194,6 +187,28 @@ const char* option_list_log_group[] = {
   "torrent_notice",
   "torrent_info",
   "torrent_debug",
+
+  "__non_cascading__",
+
+  "instrumentation_memory",
+  "instrumentation_mincore",
+  "instrumentation_choke",
+  "instrumentation_polling",
+  "instrumentation_transfers",
+
+  "peer_list_events",
+
+  "protocol_piece_events",
+  "protocol_metadata_events",
+  "protocol_network_errors",
+  "protocol_storage_errors",
+
+  "resume_data",
+
+  "rpc_events",
+  "rpc_dump",
+
+  "ui_events",
 
   NULL
 };

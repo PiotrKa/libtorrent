@@ -40,14 +40,14 @@
 #include <functional>
 #include <numeric>
 #include <cstdlib>
-#include <tr1/functional>
+#include lt_tr1_functional
+#include <rak/functional.h>
 
 #include "protocol/peer_connection_base.h"
 #include "torrent/download/group_entry.h"
 #include "torrent/peer/connection_list.h"
 #include "torrent/peer/choke_status.h"
 #include "torrent/utils/log.h"
-#include "torrent/utils/log_files.h"
 
 #include "choke_queue.h"
 
@@ -60,6 +60,15 @@ struct choke_manager_less {
 static inline bool
 should_connection_unchoke(choke_queue* cq, PeerConnectionBase* pcb) {
   return pcb->should_connection_unchoke(cq);
+}
+
+static inline void
+log_choke_changes_func_new(void* address, const char* title, int quota, int adjust) {
+  lt_log_print(LOG_INSTRUMENTATION_CHOKE,
+               "%p %i %s %i %i",
+               address,
+               0, //lf->last_update(),
+               title, quota, adjust);
 }
 
 choke_queue::~choke_queue() {
@@ -214,8 +223,7 @@ choke_queue::balance() {
   int adjust = max_unchoked - (int)(unchoked.size() + gs.now_unchoked);
   adjust = std::min(adjust, can_unchoke);
 
-  if (log_files[LOG_CHOKE_CHANGES].is_open())
-    log_choke_changes_func_new(this, "balance", m_maxUnchoked, adjust);
+  log_choke_changes_func_new(this, "balance", m_maxUnchoked, adjust);
 
   int result = 0;
 
@@ -286,8 +294,7 @@ choke_queue::cycle(uint32_t quota) {
   adjust = std::max(adjust, alternate);
   adjust = std::min(adjust, quota);
 
-  if (log_files[LOG_CHOKE_CHANGES].is_open())
-    log_choke_changes_func_new(this, "cycle", quota, adjust);
+  log_choke_changes_func_new(this, "cycle", quota, adjust);
 
   lt_log_print(LOG_PEER_DEBUG, "Called cycle; quota:%u adjust:%i alternate:%i queued:%u unchoked:%u.",
                quota, adjust, alternate, (unsigned)queued.size(), (unsigned)unchoked.size());
@@ -545,9 +552,17 @@ choke_queue::adjust_choke_range(iterator first, iterator last,
     choke_manager_allocate_slots(first, last, max, m_heuristics_list[m_heuristics].unchoke_weight, target);
   }
 
-  if (log_files[LOG_CHOKE_CHANGES].is_open())
+  if (lt_log_is_valid(LOG_INSTRUMENTATION_CHOKE)) {
     for (uint32_t i = 0; i < choke_queue::order_max_size; i++)
-      log_choke_changes_func_allocate(this, (const char*)"unchoke" + 2*is_choke, i, target[i].first, std::distance(target[i].second, target[i + 1].second));
+      lt_log_print(LOG_INSTRUMENTATION_CHOKE,
+                   "%p %i %s %u %u %i",
+                   this,
+                   0, //lf->last_update(),
+                   (const char*)"unchoke" + 2*is_choke,
+                   i,
+                   target[i].first,
+                   std::distance(target[i].second, target[i + 1].second));
+  }
 
   // Now do the actual unchoking.
   uint32_t count = 0;
@@ -578,8 +593,8 @@ choke_queue::adjust_choke_range(iterator first, iterator last,
       itr_adjust--;
 
       // if (!is_choke && !should_connection_unchoke(this, itr_adjust->first)) {
-      //   // Swap with end and continue if not done with group. Count how many?
-      //   std::iter_swap(itr_adjust, --last_adjust);
+        // Swap with end and continue if not done with group. Count how many?
+        // std::iter_swap(itr_adjust, --last_adjust);
 
       //   if (first_adjust == (itr - 1)->second)
       //     skipped++;
@@ -592,10 +607,15 @@ choke_queue::adjust_choke_range(iterator first, iterator last,
       m_slotConnection(itr_adjust->connection, is_choke);
       count++;
 
-      if (!log_files[LOG_CHOKE_CHANGES].is_open())
-        continue;
-
-      log_choke_changes_func_peer(this, (const char*)"unchoke" + 2*is_choke, &*itr_adjust);
+      lt_log_print(LOG_INSTRUMENTATION_CHOKE,
+                   "%p %i %s %p %X %llu %llu",
+                   this, 
+                   0, //lf->last_update(),
+                   (const char*)"unchoke" + 2*is_choke,
+                   itr_adjust->connection,
+                   itr_adjust->weight,
+                   (long long unsigned int)itr_adjust->connection->up_rate()->rate(),
+                   (long long unsigned int)itr_adjust->connection->down_rate()->rate());
     }
 
     // The 'target' iterators remain valid after erase since we're
@@ -631,21 +651,104 @@ void
 calculate_upload_unchoke(choke_queue::iterator first, choke_queue::iterator last) {
   while (first != last) {
     if (first->connection->is_down_local_unchoked()) {
-      uint32_t downloadRate = first->connection->peer_chunks()->download_throttle()->rate()->rate();
+      uint32_t downloadRate = first->connection->peer_chunks()->download_throttle()->rate()->rate() / 16;
 
       // If the peer transmits at less than 1KB, we should consider it
       // to be a rather stingy peer, and should look for new ones.
 
-      if (downloadRate < 1000)
+      if (downloadRate < 2048 / 16)
         first->weight = downloadRate;
       else
-        first->weight = 2 * choke_queue::order_base + downloadRate;
+        first->weight = 3 * choke_queue::order_base + downloadRate;
 
     } else {
       // This will be our optimistic unchoke queue, should be
       // semi-random. Give lower weights to known stingy peers.
+      int order = 1 + first->connection->peer_info()->is_preferred();
 
-      first->weight = 1 * choke_queue::order_base + ::random() % (1 << 10);
+      first->weight = order * choke_queue::order_base + ::random() % (1 << 10);
+    }
+
+    first++;
+  }
+}
+
+// Improved heuristics intended for seeding.
+
+void
+calculate_upload_choke_seed(choke_queue::iterator first, choke_queue::iterator last) {
+  while (first != last) {
+    int order = 1; // + first->connection->peer_info()->is_preferred();
+    uint32_t upload_rate = first->connection->peer_chunks()->upload_throttle()->rate()->rate() / 16;
+
+    first->weight = order * choke_queue::order_base - 1 - upload_rate;
+    first++;
+  }
+}
+
+void
+calculate_upload_unchoke_seed(choke_queue::iterator first, choke_queue::iterator last) {
+  while (first != last) {
+    int order = first->connection->peer_info()->is_preferred();
+
+    first->weight = order * choke_queue::order_base + ::random() % (1 << 10);
+    first++;
+  }
+}
+
+//
+// New leeching choke algorithm that 
+//
+
+// Order 0: Normal
+// Order 1: No choking of newly unchoked peers.
+void
+calculate_choke_upload_leech_experimental(choke_queue::iterator first, choke_queue::iterator last) {
+  while (first != last) {
+    // Don't choke a peer that hasn't had time to unchoke us.
+    if (rak::timer(first->connection->up_choke()->time_last_choke()) + rak::timer::from_seconds(50) > cachedTime) {
+      first->weight = 1 * choke_queue::order_base;
+      first++;
+      continue;
+    }
+
+    // Preferred peers will get 4 times higher weight.
+    int multiplier = 1 + 3 * first->connection->peer_info()->is_preferred();
+
+    uint32_t download_rate = first->connection->peer_chunks()->download_throttle()->rate()->rate() / 64;
+    uint32_t upload_rate   = first->connection->peer_chunks()->upload_throttle()->rate()->rate() / (64 * 4);
+
+    first->weight = choke_queue::order_base - 1 - (download_rate + upload_rate) * multiplier;
+    first++;
+  }
+}
+
+// Order 0: Optimistic unchokes.
+// Order 1: Normal unchokes.
+void
+calculate_unchoke_upload_leech_experimental(choke_queue::iterator first, choke_queue::iterator last) {
+  while (first != last) {
+    // Consider checking for is_down_remote_unchoked().
+    if (first->connection->is_down_local_unchoked()) {
+      int multiplier = 1 + 3 * first->connection->peer_info()->is_preferred();
+
+      uint32_t download_rate = first->connection->peer_chunks()->download_throttle()->rate()->rate() / 64;
+
+      first->weight = choke_queue::order_base + download_rate * multiplier;
+
+    } else {
+      // This will be our optimistic unchoke queue, should be
+      // semi-random. Give lower weights to known stingy peers and
+      // higher weight for preferred ones.
+      int base = (1 << 10);
+
+      if (first->connection->peer_info()->is_preferred())
+        base *= 4;
+
+      // else if (<peer is stingy>)
+      //   base /= 8;
+
+      first->weight = ::random() % base;
     }
 
     first++;
@@ -658,7 +761,7 @@ void
 calculate_download_choke(choke_queue::iterator first, choke_queue::iterator last) {
   while (first != last) {
     // Very crude version for now.
-    uint32_t downloadRate = first->connection->peer_chunks()->download_throttle()->rate()->rate();
+    uint32_t downloadRate = first->connection->peer_chunks()->download_throttle()->rate()->rate() / 16;
     first->weight = choke_queue::order_base - 1 - downloadRate;
 
     first++;
@@ -669,7 +772,7 @@ void
 calculate_download_unchoke(choke_queue::iterator first, choke_queue::iterator last) {
   while (first != last) {
     // Very crude version for now.
-    uint32_t downloadRate = first->connection->peer_chunks()->download_throttle()->rate()->rate();
+    uint32_t downloadRate = first->connection->peer_chunks()->download_throttle()->rate()->rate() / 16;
     first->weight = downloadRate;
 
     first++;
@@ -677,10 +780,10 @@ calculate_download_unchoke(choke_queue::iterator first, choke_queue::iterator la
 }
 
 choke_queue::heuristics_type choke_queue::m_heuristics_list[HEURISTICS_MAX_SIZE] = {
-  { &calculate_upload_choke,      &calculate_upload_unchoke,      { 1, 1, 1, 1 }, { 1, 3, 9, 0 } },
-  { &calculate_upload_choke,      &calculate_upload_unchoke,      { 1, 1, 1, 1 }, { 1, 3, 9, 0 } },
-  { &calculate_download_choke,    &calculate_download_unchoke,    { 1, 1, 1, 1 }, { 1, 1, 1, 1 } },
-  { &calculate_download_choke,    &calculate_download_unchoke,    { 1, 1, 1, 1 }, { 1, 1, 1, 1 } },
+  { &calculate_upload_choke,                    &calculate_upload_unchoke,      { 1, 1, 1, 1 }, { 1, 3, 6, 9 } },
+  { &calculate_upload_choke_seed,               &calculate_upload_unchoke_seed, { 1, 1, 1, 1 }, { 1, 3, 6, 9 } },
+  { &calculate_choke_upload_leech_experimental, &calculate_unchoke_upload_leech_experimental, { 32, 1, 1, 1 }, { 1, 6, 8, 16 } },
+  { &calculate_download_choke,                  &calculate_download_unchoke,    { 1, 1, 1, 1 }, { 1, 1, 1, 1 } },
 };
 
 }

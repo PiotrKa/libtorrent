@@ -41,7 +41,7 @@
 #include <sys/types.h>
 #include <torrent/common.h>
 #include <torrent/utils/signal_bitfield.h>
-#include <tr1/functional>
+#include lt_tr1_functional
 
 namespace torrent {
 
@@ -51,8 +51,8 @@ class thread_interrupt;
 class LIBTORRENT_EXPORT lt_cacheline_aligned thread_base {
 public:
   typedef void* (*pthread_func)(void*);
-  typedef std::tr1::function<void ()>     slot_void;
-  typedef std::tr1::function<uint64_t ()> slot_timer;
+  typedef std::function<void ()>     slot_void;
+  typedef std::function<uint64_t ()> slot_timer;
   typedef class signal_bitfield           signal_type;
 
   enum state_type {
@@ -76,7 +76,8 @@ public:
   bool                is_active()      const { return state() == STATE_ACTIVE; }
   bool                is_inactive()    const { return state() == STATE_INACTIVE; }
 
-  bool                is_polling()     const { return (flags() & flag_polling); }
+  bool                is_polling() const;
+  bool                is_current() const;
 
   bool                has_no_timeout()   const { return (flags() & flag_no_timeout); }
   bool                has_do_shutdown()  const { return (flags() & flag_do_shutdown); }
@@ -134,6 +135,8 @@ protected:
   state_type          m_state lt_cacheline_aligned;
   int                 m_flags lt_cacheline_aligned;
 
+  int                 m_instrumentation_index;
+
   Poll*               m_poll;
   signal_type         m_signal_bitfield;
 
@@ -143,6 +146,16 @@ protected:
   thread_interrupt*   m_interrupt_sender;
   thread_interrupt*   m_interrupt_receiver;
 };
+
+inline bool
+thread_base::is_polling() const {
+  return (flags() & flag_polling);
+}
+
+inline bool
+thread_base::is_current() const {
+  return m_thread == pthread_self();
+}
 
 inline int
 thread_base::flags() const {

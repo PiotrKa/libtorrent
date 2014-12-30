@@ -34,8 +34,7 @@
 //           Skomakerveien 33
 //           3185 Skoppum, NORWAY
 
-// Add some helpfull words here. (These are some words, hope they are
-// helpful)
+// Add some helpfull words here.
 
 #ifndef LIBTORRENT_CONNECTION_MANAGER_H
 #define LIBTORRENT_CONNECTION_MANAGER_H
@@ -46,7 +45,7 @@
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <sys/socket.h>
-#include <tr1/functional>
+#include lt_tr1_functional
 #include <torrent/common.h>
 
 namespace torrent {
@@ -98,12 +97,12 @@ public:
     handshake_retry_encrypted    = 9
   };
 
-  typedef std::tr1::function<uint32_t (const sockaddr*)>     slot_filter_type;
-  typedef std::tr1::function<ThrottlePair (const sockaddr*)> slot_throttle_type;
+  typedef std::function<uint32_t (const sockaddr*)>     slot_filter_type;
+  typedef std::function<ThrottlePair (const sockaddr*)> slot_throttle_type;
 
   // The sockaddr argument in the result slot call is NULL if the resolve failed, and the int holds the errno.
-  typedef std::tr1::function<void (const sockaddr*, int)> slot_resolver_result_type;
-  typedef std::tr1::function<slot_resolver_result_type* (const char*, int, int, slot_resolver_result_type)> slot_resolver_type;
+  typedef std::function<void (const sockaddr*, int)> slot_resolver_result_type;
+  typedef std::function<slot_resolver_result_type* (const char*, int, int, slot_resolver_result_type)> slot_resolver_type;
 
   ConnectionManager();
   ~ConnectionManager();
@@ -150,9 +149,10 @@ public:
   // Since trackers need our port number, it doesn't get cleared after
   // 'listen_close()'. The client may change the reported port number,
   // but do note that it gets overwritten after 'listen_open(...)'.
-  port_type           listen_port() const                     { return m_listenPort; }
-  void                set_listen_port(port_type p)            { m_listenPort = p; }
-
+  port_type           listen_port() const                     { return m_listen_port; }
+  int                 listen_backlog() const                  { return m_listen_backlog; }
+  void                set_listen_port(port_type p)            { m_listen_port = p; }
+  void                set_listen_backlog(int v);
 
   // The resolver returns a pointer to its copy of the result slot
   // which the caller may set blocked to prevent the slot from being
@@ -184,11 +184,12 @@ private:
   sockaddr*           m_proxyAddress;
 
   Listen*             m_listen;
-  port_type           m_listenPort;
+  port_type           m_listen_port;
+  uint32_t            m_listen_backlog;
 
-  slot_filter_type      m_slot_filter;
-  slot_resolver_type    m_slot_resolver;
-  slot_throttle_type    m_slot_address_throttle;
+  slot_filter_type    m_slot_filter;
+  slot_resolver_type  m_slot_resolver;
+  slot_throttle_type  m_slot_address_throttle;
 };
 
 }
